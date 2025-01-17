@@ -1,5 +1,5 @@
 ---
-title: "lab-2-key"
+title: "lab-2 ryan"
 format: 
   html:
     code-folding: show
@@ -13,6 +13,7 @@ execute:
 ```{r}
 # load libraries
 library(tidyverse)
+install.packages("palmerpenguins")
 library(palmerpenguins)
 ```
 
@@ -49,7 +50,9 @@ R is able to recognize formulas if saved to the global environment. Take advanta
 #| eval: false
 
 #variable name
-f1   <-  dep_var~col_name_1+col_name_2+col_name_3
+f1   <-  mass~bill_l+bill_d+flip_l+species+sex+island
+f2   <-  mass~bill_l+bill_d+flip_l+species+sex
+f3  <-  mass~bill_d+flip_l+species+sex
 
 mdl<-lm(f1, data=df_where_column_names_come_frome)
 ```
@@ -58,6 +61,14 @@ mdl<-lm(f1, data=df_where_column_names_come_frome)
 
 ```{r}
 # Use this chunk and any extras to complete setting up the model
+
+mdl1 <- lm(f1, data=penguins_clean)
+mdl2 <- lm(f2, data=penguins_clean)
+mdl3 <- lm(f3, data=penguins_clean)
+
+summary(mdl1)
+summary(mdl2)
+summary(mdl3)
 ```
 
 
@@ -69,7 +80,7 @@ Use AIC to justify your model selection. What edits do you need to make in order
 ```{r}
 #| eval: false
 
-AIC(x,y,z)
+AIC(mdl1,mdl2,mdl3)
 ```
 
 
@@ -79,11 +90,20 @@ Now we're going to use 10-fold cross validation to help us select the models. Wr
 
 Pseudocode:
 
+Separate portion of data set for training and test, how much training data, or how many folds (10 folds)
+Split data into test and training
+Use random sampling
+What metric?
+  Use root mean squared error
+  Let's make function for RMSE
 
+For loop:
+  apply model to each training set, each fold
+  make predictions on the test set with fitted training model
+close loop:
 
-
-
-
+summariuze our RMSE (which model on average was best)
+Final model built on whole data set
 
 ### Accuracy criteria
 
@@ -101,18 +121,31 @@ calc_rmse<-function(x,y){
     mean() |> 
     sqrt()
   return(rmse)
-}
+} 
 
 calc_rmse_2<-function(x,y){
   rmse<- sqrt(mean((x-y)^2))
   
   return(rmse)
 }
+
+x <- c(1,2,3,4,5,6,7,8,9,10)
+y<- c(2,4,6,8,10,12,14,16,18,20)
+
+test <- data.frame(x = x, y =y) %>%
+  mutate(rmse = calc_rmse(x, y)) %>%
+  mutate(rmse2 = calc_rmse_2(x, y))
+
+x<- rnorm(10000)
+y<- rnorm(10000)
+
+calc_rmse(x,y)
+calc_rmse_2(x,y)
+
+#First function nicer to look at
+#Several different ways to make the vector of x and y
+#function does not have to be x and y
 ```
-
-
-
-
 
 
 ### Testing and Training split
@@ -135,6 +168,8 @@ sample(ex,size=10,replace=TRUE)
 
 #Describe in words the replace argument.
 
+#Because wihtout replace were trying to draw 10 from 5,
+#It will essentially resample from 5
 
 ```
 
@@ -142,7 +177,9 @@ Why is everybody getting different answers in the example sample? Is this a prob
 
 ```{r}
 #seed
+set.seed(42)
 
+sample(ex,size = 10, replace=TRUE)
 
 ```
 
@@ -154,7 +191,8 @@ folds<-10
 
 fold_vec<-rep(1:folds,length.out=nrow(penguins_clean))
 
-penguins_fold<-penguins_clean |> #what goes here?
+penguins_fold<-penguins_clean |>
+  mutate(group=sample(fold_vec,size=n(),replace = FALSE))
   
 
 #check to make sure the fold groups are balanced
@@ -165,15 +203,24 @@ table(penguins_fold$group)
 Create dataframes called `test_df` and `train_df` that split the penguins data into a train or test sample
 
 ```{r}
-# datasets here
+test_df <- penguins_fold |>
+  filter(group==1)
+
+train_df<-penguins_fold |>
+  filter(group!= 1)
 ```
 
 
 Now fit each model to the training set using the `lm()`. Name each model `training_lmX` where X is the number of the formula.
 
 ```{r}
+training_lm1 <- lm(f1, data=train_df)
+training_lm2 <- lm(f2, data=train_df)
+training_lm3 <- lm(f3, data=train_df)
 
-
+summary(training_lm1)
+summary(training_lm2)
+summary(training_lm3)
 
 ```
 
@@ -185,16 +232,18 @@ Now fit each model to the training set using the `lm()`. Name each model `traini
 
 ```{r}
 predict_test<-test_df |> 
-  mutate(model1 = predict(xxx,test_df),
-         model2 = predict(xxx,test_df),
-         model3 = predict(xxx,test_df))
+  mutate(model1 = predict(training_lm1,test_df),
+         model2 = predict(training_lm2,test_df),
+         model3 = predict(training_lm3,test_df))
 ```
 
 Calculate the RMSE of the first fold test predictions. Hint: Use summarize to condense the `predict_test` dataframe.
 
 ```{r}
 rmse_predict_test<-predict_test |> 
-  summarize(????)
+  summarize(rmse_mdl1=calc_rmse(mass,model1),
+            rmse_mdl2=calc_rmse(mass,model2),
+            rmse_mdl3=calc_rmse(mass,model3))
 ```
 
 What are the results just looking at the first fold?
@@ -206,19 +255,29 @@ Our general structure works with one fold. Now we need to evaluate across all 10
 ```{r}
 
 ### initialize a blank vector
-rmse_vec<-vector(length=folds)  #Why?
+rmse_vec<-vector(mode='numeric', length=folds)  #Why?
 
 for( i in 1:folds){
 
   # separate into test and train
+  kfold_test_df<-penguins_fold |>
+    filter(group == i)
   
-  
+   kfold_train_df<-penguins_fold |>
+    filter(group!=i)
   # Run for one model
-  
+   
+   kfold_train_df1<-lm(f1,kfold_train_df)
+   
   #Get the predictions from the model
+   
+  predict_test <- kfold_test_df |> 
+    mutate(model1 = predict(kfold_train_df1,kfold_test_df))
   
   # Summarize/calculate the rmse for that model
   
+  kfold_rmse <- summarize(predict_test, 
+                        rmse_md1=calc_rmse(mass, model1))
   
   rmse_vec[i]<-kfold_rmse$rmse_md1
 }
@@ -233,6 +292,29 @@ Great we made a for loop for one model. Now we would have to do it again and aga
 ```{r}
 kfold_cv<-function(i,df,formula){
   
+  #split into train and test
+  
+  kfold_train_df<-df |>
+    filter(group!=i)
+  
+  kfold_test_df<-df |>
+    filter(group==i)
+  
+  
+  #run model
+  
+  kfold_lm <- lm(formula,data=kfold_train_df)
+  
+  #get prediction
+  kfold_pred_df<-kfold_test_df |>
+    mutate(md=predict(kfold_lm,kfold_test_df))
+  
+  #caluculate rmse
+  
+  kfold_rmse<-kfold_pred_df |>
+    summarise(rmse_md=calc_rmse(md,mass))
+  
+  return(kfold_rmse$rmse_md)
   
   
 }
@@ -248,7 +330,7 @@ Since we already defined the function that does CV for each model. We can use pu
 
 ```{r}
 rmse_df<-data.frame(j=1:folds) |> mutate(rmse_mdl1 = map_dbl(j, kfold_cv, df=penguins_fold,formula=f1),
-                                         rmse_mdl2=map_dbl(j,kfold_cv,df=penguins_fold,formula=f2),
+                                  rmse_mdl2=map_dbl(j,kfold_cv,df=penguins_fold,formula=f2),
                                          rmse_mdl3=map_dbl(j,kfold_cv,df=penguins_fold,formula=f3))
 
 rmse_means<-rmse_df |> 
@@ -262,6 +344,11 @@ Between AIC and the RMSE scores of the Cross Validation, which model does the be
 
 
 The final step is to run the selected model on all the data. Fit a final model and provide the summary table.
+
+```{r}
+best_model <- lm(f2, data = penguins_clean)
+summary(best_model)
+```
 
 
 Render your document, commit changes, and push to github.
