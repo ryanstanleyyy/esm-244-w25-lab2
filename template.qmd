@@ -13,7 +13,6 @@ execute:
 ```{r}
 # load libraries
 library(tidyverse)
-install.packages("palmerpenguins")
 library(palmerpenguins)
 ```
 
